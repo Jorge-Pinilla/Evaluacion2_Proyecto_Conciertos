@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block title %}Mi Carro de Compras{% endblock %}
+{% block content %}
+<h2 class="fw-bold mb-4">Carro de Reserva de Entradas</h2>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+<div class="card shadow-sm border-0 p-4">
+    {% if carro.items.all %}
+        <table class="table align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Sector / Localidad</th>
+                    <th>Precio Unitario</th>
+                    <th>Cantidad</th>
+                    <th>Subtotal</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in carro.items.all %}
+                <tr>
+                    <td class="fw-semibold">{{ item.sector.nombre }} ({{ item.sector.evento.nombre }})</td>
+                    <td>${{ item.sector.precio }}</td>
+                    <td>{{ item.cantidad }}</td>
+                    <td class="fw-bold text-success">${% widthratio item.sector.precio 1 item.cantidad %}</td>
+                    <td>
+                        <form method="POST" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="remove">
+                            <input type="hidden" name="item_id" value="{{ item.id }}">
+                            <button type="submit" class="btn btn-outline-danger btn-sm">Eliminar</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div class="d-flex justify-content-between align-items-center mt-4">
+            <h3 class="fw-bold">Total a Pagar: ${{ total }}</h3>
+            <!-- Botón que activa el Modal de Confirmación -->
+            <button type="button" class="btn btn-success btn-lg px-4" data-bs-toggle="modal" data-bs-target="#modalTerminosCompra">
+                Confirmar Compra y Pagar
+            </button>
+        </div>
+    {% else %}
+        <div class="text-center py-5">
+            <p class="text-muted">Tu carro de compras está vacío.</p>
+            <a href="{% url 'home' %}" class="btn btn-dark">Ver Eventos</a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- VENTANA MODAL DE ADVERTENCIA Y TÉRMINOS -->
+<div class="modal fade" id="modalTerminosCompra" tabindex="-1" aria-labelledby="modalTerminosLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fw-bold" id="modalTerminosLabel">⚠️ Aviso Importante sobre su Compra</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4 px-4">
+                <p class="text-secondary mb-0" style="text-align: justify; line-height: 1.6;">
+                    Al concretar la compra, <strong>ConciertosApp</strong> no aceptará cancelaciones ni otorgará devoluciones de dinero al usuario si este no cancela su compra en un plazo de 10 días. 
+                    <br><br>
+                    ¿Deseas continuar con el pago de tus entradas?
+                </p>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cancelar</button>
+                <a href="{% url 'checkout' %}" class="btn btn-success px-4 fw-semibold">Continuar con el pago</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

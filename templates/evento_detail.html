@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}{{ evento.nombre }}{% endblock %}
+{% block content %}
+<div class="card shadow-sm border-0 p-4 mb-4">
+    <h1 class="fw-bold">{{ evento.nombre }}</h1>
+    <h3 class="text-primary">Artista: {{ evento.artista_banda }}</h3>
+    <p class="text-muted">Fecha y Hora: {{ evento.fecha_hora|date:"d/m/Y H:i" }} | Recinto: {{ evento.recinto.nombre }} ({{ evento.recinto.ciudad }})</p>
+</div>
+
+<h3 class="fw-bold mb-3">Sectores y Localidades Disponibles</h3>
+<div class="row">
+    {% for sector in sectores %}
+    <div class="col-md-4 mb-3">
+        <div class="card shadow-sm border-0 p-3">
+            <h5 class="fw-bold">{{ sector.nombre }}</h5>
+            <p class="text-success fs-5 fw-bold mb-1">${{ sector.precio }}</p>
+            <p class="small text-muted mb-3">Stock disponible: {{ sector.stock_total }} entradas</p>
+            
+            {% if request.user.is_authenticated and request.user.role == 'ESPECTADOR' %}
+                <form method="POST" action="{% url 'carro' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="add">
+                    <input type="hidden" name="sector_id" value="{{ sector.id }}">
+                    <div class="input-group mb-2">
+                        <input type="number" name="cantidad" value="1" min="1" max="{{ sector.stock_total }}" class="form-control">
+                        <button class="btn btn-dark" type="submit">Añadir al Carro</button>
+                    </div>
+                </form>
+            {% elif not request.user.is_authenticated %}
+                <a href="{% url 'login' %}" class="btn btn-outline-secondary btn-sm">Inicia sesión para comprar</a>
+            {% endif %}
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <p class="text-muted">No hay sectores habilitados para este evento todavía.</p>
+    </div>
+    {% endfor %}
+</div>
+<div class="mt-3">
+    <a href="{% url 'home' %}" class="btn btn-secondary">Volver a la Cartelera</a>
+</div>
+{% endblock %}

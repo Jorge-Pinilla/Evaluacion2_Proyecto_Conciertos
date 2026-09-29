@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}Mis Entradas Compradas{% endblock %}
+{% block content %}
+<!-- Contenedor flexible para alinear el título a la izquierda y el botón a la derecha -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold mb-0">Historial de Compras y Entradas</h2>
+    <a href="{% url 'home' %}" class="btn btn-outline-dark fw-semibold">🎵 Volver a la Cartelera</a>
+</div>
+
+<div class="card shadow-sm border-0 p-4">
+    {% if compras %}
+        {% for compra in compras %}
+        <div class="border-bottom pb-3 mb-3">
+            <div class="d-flex justify-content-between">
+                <h5 class="fw-bold">Orden #{{ compra.id }} - <span class="text-success">{{ compra.estado }}</span></h5>
+                <span class="text-muted small">{{ compra.creado_en|date:"d/m/Y H:i" }}</span>
+            </div>
+            <p class="mb-1 fw-bold">Total Pagado: ${{ compra.total }}</p>
+            <div class="mt-2 bg-light p-3 rounded">
+                <h6 class="fw-bold text-dark">Tickets Emitidos (UUID Único):</h6>
+                <ul class="mb-0 small">
+                    {% for entrada in compra.entradas.all %}
+                    <li>Sector: <strong>{{ entrada.sector.nombre }}</strong> | Código Hash: <code>{{ entrada.codigo_hash }}</code> | Titular: {{ entrada.titular }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="text-center py-5">
+            <p class="text-muted">Aún no has comprado ninguna entrada.</p>
+            <a href="{% url 'home' %}" class="btn btn-dark">Explorar Eventos</a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

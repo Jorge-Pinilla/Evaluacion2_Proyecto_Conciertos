@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Panel del Organizador{% endblock %}
+{% block content %}
+<h2 class="fw-bold mb-4">Panel de Gestión - Organizador de Eventos</h2>
+
+<div class="row mb-5">
+    <!-- Crear Evento -->
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 p-4 h-100">
+            <h4 class="fw-bold mb-3">Registrar Nuevo Evento</h4>
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="evento">
+                {{ evento_form.as_p }}
+                <button type="submit" class="btn btn-dark w-100">Crear Evento</button>
+            </form>
+        </div>
+    </div>
+    <!-- Crear Sector -->
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 p-4 h-100">
+            <h4 class="fw-bold mb-3">Añadir Sector a un Evento</h4>
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="sector">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Seleccionar Evento</label>
+                    <select name="evento_id" class="form-select" required>
+                        {% for ev in mis_eventos %}
+                        <option value="{{ ev.id }}">{{ ev.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {{ sector_form.as_p }}
+                <button type="submit" class="btn btn-primary w-100">Crear Sector</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Gestión de Órdenes de Clientes y Estados -->
+<div class="card shadow-sm border-0 p-4">
+    <h3 class="fw-bold mb-3">Órdenes de Clientes y Gestión de Estados</h3>
+    <table class="table align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>ID Orden</th>
+                <th>Cliente</th>
+                <th>Total</th>
+                <th>Estado Actual</th>
+                <th>Acción / Cambiar Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in compras_clientes %}
+            <tr>
+                <td>#{{ c.id }}</td>
+                <td>{{ c.usuario.username }}</td>
+                <td>${{ c.total }}</td>
+                <td><span class="badge bg-secondary">{{ c.estado }}</span></td>
+                <td>
+                    <form method="POST" class="d-flex gap-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="form_type" value="estado_compra">
+                        <input type="hidden" name="compra_id" value="{{ c.id }}">
+                        <select name="estado" class="form-select form-select-sm">
+                            <option value="PAGADO" {% if c.estado == 'PAGADO' %}selected{% endif %}>PAGADO</option>
+                            <option value="ENTREGADO" {% if c.estado == 'ENTREGADO' %}selected{% endif %}>ENTREGADO</option>
+                            <option value="CANCELADO" {% if c.estado == 'CANCELADO' %}selected{% endif %}>CANCELADO (Repone Stock)</option>
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-dark">Actualizar</button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center text-muted">No hay compras registradas para tus eventos.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

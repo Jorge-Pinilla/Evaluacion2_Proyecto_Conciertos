@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Iniciar Sesión - ConciertosApp{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card shadow-sm p-4 border-0 rounded-3 bg-white">
+            <h3 class="text-center fw-bold mb-4 text-dark">Iniciar Sesión</h3>
+            
+            {% if form.errors %}
+                <div class="alert alert-danger py-2 text-center">
+                    Usuario o contraseña incorrectos. Inténtalo de nuevo.
+                </div>
+            {% endif %}
+
+            <form method="post">
+                {% csrf_token %}
+                {{ form.as_p }}
+                <button type="submit" class="btn btn-dark w-100 fw-semibold py-2 mt-2">Entrar al Sistema</button>
+            </form>
+            <div class="text-center mt-3">
+                <p class="small text-muted">¿No tienes una cuenta? <a href="{% url 'registro' %}" class="text-dark fw-bold">Regístrate aquí</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
