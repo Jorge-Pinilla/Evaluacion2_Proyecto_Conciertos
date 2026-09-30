@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load clp_tags %}
 {% block title %}{{ evento.nombre }}{% endblock %}
 {% block content %}
 <div class="card shadow-sm border-0 p-4 mb-4">
@@ -11,13 +12,30 @@
 <div class="row">
     {% for sector in sectores %}
     <div class="col-md-4 mb-3">
-        <div class="card shadow-sm border-0 p-3">
-            <h5 class="fw-bold">{{ sector.nombre }}</h5>
-            <p class="text-success fs-5 fw-bold mb-1">${{ sector.precio }}</p>
+        <!-- Tarjeta con posición relativa para contener la etiqueta flotante -->
+        <div class="card shadow-sm border-0 p-3 position-relative h-100">
+            
+            <!-- Viñeta sutil de últimas entradas (aparece si el stock es <= 25) -->
+            {% if sector.stock_total <= 25 %}
+                <span class="position-absolute top-0 end-0 m-3 badge bg-danger text-white fw-semibold small shadow-sm px-2 py-1">
+                    ⚠️ ¡Últimas entradas!
+                </span>
+            {% endif %}
+
+            <!-- Nombre del sector (con espacio a la derecha para no chocar con la viñeta) -->
+            <h5 class="fw-bold pe-5">{{ sector.nombre }}</h5>
+            
+            <!-- Precio con formato chileno (verde) y etiqueta CLP (negro) -->
+            <p class="fs-5 fw-bold mb-1">
+                <span class="text-success">${{ sector.precio|clp }}</span> 
+                <span class="text-dark">CLP</span>
+            </p>
+            
+            <!-- Stock disponible -->
             <p class="small text-muted mb-3">Stock disponible: {{ sector.stock_total }} entradas</p>
             
             {% if request.user.is_authenticated and request.user.role == 'ESPECTADOR' %}
-                <form method="POST" action="{% url 'carro' %}">
+                <form method="POST" action="{% url 'carro' %}" class="mt-auto">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="add">
                     <input type="hidden" name="sector_id" value="{{ sector.id }}">
@@ -27,7 +45,7 @@
                     </div>
                 </form>
             {% elif not request.user.is_authenticated %}
-                <a href="{% url 'login' %}" class="btn btn-outline-secondary btn-sm">Inicia sesión para comprar</a>
+                <a href="{% url 'login' %}" class="btn btn-outline-secondary btn-sm mt-auto">Inicia sesión para comprar</a>
             {% endif %}
         </div>
     </div>

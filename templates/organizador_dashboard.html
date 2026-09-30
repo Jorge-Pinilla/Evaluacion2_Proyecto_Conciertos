@@ -1,10 +1,52 @@
 {% extends 'base.html' %}
 {% block title %}Panel del Organizador{% endblock %}
 {% block content %}
-<h2 class="fw-bold mb-4">Panel de Gestión - Organizador de Eventos</h2>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold mb-0">Panel de Gestión - Organizador de Eventos</h2>
+
+    <!-- BOTÓN DE NOTIFICACIONES -->
+    <div class="dropdown" id="notifDropdownContainer">
+        <button class="btn btn-dark position-relative px-3 py-2 dropdown-toggle d-flex align-items-center gap-2" type="button" id="dropdownNotificaciones" data-bs-toggle="dropdown" aria-expanded="false">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-bell-fill" viewBox="0 0 16 16">
+                <path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zm.995-14.901a1 1 0 1 0-1.99 0A5.002 5.002 0 0 0 3 6c0 1.098-.5 6-2 7h14c-1.5-1-2-5.902-2-7 0-2.42-1.72-4.44-4.005-4.901z"/>
+            </svg>
+            <span>Alertas</span>
+            
+            <!-- PUNTO ROJO CONDICIONAL -->
+            <span id="puntoRojoNotif" class="position-absolute top-0 start-100 translate-middle p-2 bg-danger border border-light rounded-circle {% if not tiene_no_leidas %}d-none{% endif %}">
+                <span class="visually-hidden">Nuevas alertas de stock</span>
+            </span>
+        </button>
+
+        <ul class="dropdown-menu dropdown-menu-end shadow p-2" aria-labelledby="dropdownNotificaciones" style="width: 340px;">
+            <li><h6 class="dropdown-header fw-bold text-dark border-bottom pb-2">Notificaciones de Stock Bajo (≤ 20)</h6></li>
+            
+            {% if notificaciones %}
+                {% for notif in notificaciones %}
+                <li>
+                    <div class="dropdown-item-text d-flex justify-content-between align-items-start py-2 border-bottom">
+                        <div>
+                            <p class="mb-1 small text-danger fw-bold">⚠️ Stock crítico: {{ notif.stock_total }} entradas</p>
+                            <p class="mb-1 small text-dark">El evento <strong>{{ notif.evento.nombre }}</strong> en el sector <strong>{{ notif.nombre }}</strong> tiene pocas entradas disponibles.</p>
+                        </div>
+                        <form method="POST" class="ms-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="form_type" value="descartar_notificacion">
+                            <input type="hidden" name="sector_id" value="{{ notif.id }}">
+                            <button type="submit" class="btn-close btn-close-sm" title="Eliminar notificación" aria-label="Cerrar"></button>
+                        </form>
+                    </div>
+                </li>
+                {% endfor %}
+            {% else %}
+                <li><span class="dropdown-item-text text-muted small text-center py-3">No hay alertas de stock bajo en este momento.</span></li>
+            {% endif %}
+        </ul>
+    </div>
+</div>
 
 <div class="row mb-5">
-    <!-- Crear Evento -->
+    <!-- Registrar Evento -->
     <div class="col-md-6">
         <div class="card shadow-sm border-0 p-4 h-100">
             <h4 class="fw-bold mb-3">Registrar Nuevo Evento</h4>
@@ -16,25 +58,28 @@
             </form>
         </div>
     </div>
-    <!-- Crear Sector -->
+    <!-- Añadir Sector -->
     <div class="col-md-6">
-        <div class="card shadow-sm border-0 p-4 h-100">
-            <h4 class="fw-bold mb-3">Añadir Sector a un Evento</h4>
-            <form method="POST">
-                {% csrf_token %}
-                <input type="hidden" name="form_type" value="sector">
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Seleccionar Evento</label>
-                    <select name="evento_id" class="form-select" required>
-                        {% for ev in mis_eventos %}
-                        <option value="{{ ev.id }}">{{ ev.nombre }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {{ sector_form.as_p }}
-                <button type="submit" class="btn btn-primary w-100">Crear Sector</button>
-            </form>
-        </div>
+    <div class="card shadow-sm border-0 p-4 h-100">
+        <h4 class="fw-bold mb-3">Añadir Sector a un Evento</h4>
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="form_type" value="sector">
+            
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Seleccionar Evento</label>
+                <!-- Agregamos la opción por defecto vacía, seleccionada y deshabilitada -->
+                <select name="evento_id" class="form-select" required>
+                    <option value="" selected disabled>-- Seleccione un evento --</option>
+                    {% for ev in mis_eventos %}
+                    <option value="{{ ev.id }}">{{ ev.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {{ sector_form.as_p }}
+            <button type="submit" class="btn btn-primary w-100">Crear Sector</button>
+        </form>
     </div>
 </div>
 
@@ -78,4 +123,27 @@
         </tbody>
     </table>
 </div>
+
+<!-- SCRIPT PARA QUITAR EL PUNTO ROJO AL ABRIR LAS NOTIFICACIONES -->
+<script>
+    const dropdownElement = document.getElementById('dropdownNotificaciones');
+    if (dropdownElement) {
+        dropdownElement.addEventListener('show.bs.dropdown', function () {
+            const puntoRojo = document.getElementById('puntoRojoNotif');
+            if (puntoRojo && !puntoRojo.classList.contains('d-none')) {
+                // Ocultar visualmente el punto rojo de inmediato
+                puntoRojo.classList.add('d-none');
+
+                // Enviar petición asíncrona al backend para registrar que ya fueron leídas
+                fetch("{% url 'marcar_leidas' %}", {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json'
+                    }
+                });
+            }
+        });
+    }
+</script>
 {% endblock %}

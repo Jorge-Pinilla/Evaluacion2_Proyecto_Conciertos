@@ -63,6 +63,13 @@ class EventoForm(forms.ModelForm):
 
 
 class SectorForm(forms.ModelForm):
+    # Declaramos el campo explícitamente para personalizar la opción por defecto en español
+    nombre = forms.ChoiceField(
+        choices=[('', '-- Seleccione un tipo de sector --')] + list(Sector.SECTOR_CHOICES),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label="Tipo de Sector"
+    )
+
     class Meta:
         model = Sector
         fields = ['nombre', 'precio', 'stock_total']
@@ -72,7 +79,6 @@ class SectorForm(forms.ModelForm):
             'stock_total': 'Cantidad de Entradas (Stock)'
         }
         widgets = {
-            'nombre': forms.Select(attrs={'class': 'form-select'}),  # Menú desplegable Bootstrap
             'precio': forms.NumberInput(attrs={'class': 'form-control'}),
             'stock_total': forms.NumberInput(attrs={'class': 'form-control'}),
         }

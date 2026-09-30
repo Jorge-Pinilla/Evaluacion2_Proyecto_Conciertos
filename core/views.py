@@ -4,7 +4,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.forms import AuthenticationForm
 from django.db import transaction
-from core.models import Evento, Sector, CarroTickets, ItemCarro, Compra, ItemCompra, EntradaComprada, Recinto
+from django.http import JsonResponse
+from core.models import Evento, Sector, CarroTickets, ItemCarro, Compra, ItemCompra, EntradaComprada, Recinto, NotificacionDescartada, NotificacionLeida
 from .forms import RegistroForm, EventoForm, SectorForm
 
 def home_view(request):
@@ -84,37 +85,59 @@ def carro_view(request):
     return render(request, 'carro.html', {'carro': carro, 'total': total})
 
 @login_required
-@transaction.atomic
 def checkout_view(request):
-    """Checkout: valida stock atómicamente, descuenta inventario y emite entradas UUID."""
+    """Checkout: valida stock con bloqueo de fila (select_for_update), evitando sobreventa concurrente."""
     if request.user.role != 'ESPECTADOR':
         return redirect('home')
+    
     carro = get_object_or_404(CarroTickets, usuario=request.user)
     items = carro.items.all()
     if not items.exists():
         return redirect('carro')
 
-    total = 0
-    for item in items:
-        if item.sector.stock_total < item.cantidad:
-            total = sum(i.sector.precio * i.cantidad for i in items)
-            return render(request, 'carro.html', {'carro': carro, 'total': total, 'error': f'Stock insuficiente para el sector: {item.sector.nombre}'})
-        total += item.sector.precio * item.cantidad
+    try:
+        with transaction.atomic():
+            sector_ids = [item.sector.id for item in items]
+            # select_for_update() bloquea temporalmente los sectores en PostgreSQL para evitar condiciones de carrera simultáneas
+            sectores = Sector.objects.select_for_update().filter(id__in=sector_ids)
+            sector_dict = {s.id: s for s in sectores}
 
-    # Crear compra transaccional en estado PAGADO
-    compra = Compra.objects.create(usuario=request.user, total=total, estado='PAGADO')
-    for item in items:
-        ItemCompra.objects.create(compra=compra, sector=item.sector, cantidad=item.cantidad, precio_unitario=item.sector.precio)
-        # Descuento estricto de stock del catálogo físico
-        item.sector.stock_total -= item.cantidad
-        item.sector.save()
-        # Generación de entradas con código Hash/UUID único por ticket
-        for _ in range(item.cantidad):
-            EntradaComprada.objects.create(compra=compra, sector=item.sector, titular=request.user.get_full_name() or request.user.username)
+            total = 0
+            for item in items:
+                sector_db = sector_dict.get(item.sector.id)
+                if not sector_db or sector_db.stock_total < item.cantidad:
+                    total = sum(i.sector.precio * i.cantidad for i in items)
+                    return render(request, 'carro.html', {
+                        'carro': carro, 
+                        'total': total, 
+                        'error': f'¡Lo sentimos! Las entradas para el sector "{item.sector.nombre}" acaban de agotarse o no hay stock suficiente[cite: 10].'
+                    })
+                total += sector_db.precio * item.cantidad
 
-    # Vaciar carro persistente tras compra exitosa
-    carro.items.all().delete()
-    return redirect('mis_entradas')
+            # Crear compra transaccional en estado PAGADO
+            compra = Compra.objects.create(usuario=request.user, total=total, estado='PAGADO')
+            for item in items:
+                sector_db = sector_dict[item.sector.id]
+                ItemCompra.objects.create(compra=compra, sector=sector_db, cantidad=item.cantidad, precio_unitario=sector_db.precio)
+                # Descuento estricto de stock del catálogo físico
+                sector_db.stock_total -= item.cantidad
+                sector_db.save()
+                # Generación de entradas con código Hash/UUID único por ticket
+                for _ in range(item.cantidad):
+                    EntradaComprada.objects.create(compra=compra, sector=sector_db, titular=request.user.get_full_name() or request.user.username)
+
+            # Vaciar carro persistente tras compra exitosa
+            carro.items.all().delete()
+            
+        return redirect('mis_entradas')
+
+    except Exception as e:
+        total = sum(i.sector.precio * i.cantidad for i in items)
+        return render(request, 'carro.html', {
+            'carro': carro, 
+            'total': total, 
+            'error': 'Ocurrió un error inesperado al procesar la compra por alta concurrencia. Inténtalo nuevamente.'
+        })
 
 @login_required
 def mis_entradas_view(request):
@@ -126,7 +149,6 @@ def mis_entradas_view(request):
 
 @login_required
 def organizador_dashboard_view(request):
-    """Panel de gestión para el Organizador (Crear eventos/sectores y actualizar estados)."""
     if request.user.role != 'ORGANIZADOR':
         return redirect('home')
     
@@ -156,7 +178,6 @@ def organizador_dashboard_view(request):
             compra_id = request.POST.get('compra_id')
             nuevo_estado = request.POST.get('estado')
             c_obj = get_object_or_404(Compra, id=compra_id)
-            # Si se cambia a CANCELADO, reposición automática de stock
             if c_obj.estado != 'CANCELADO' and nuevo_estado == 'CANCELADO':
                 with transaction.atomic():
                     for it in c_obj.items.all():
@@ -166,6 +187,24 @@ def organizador_dashboard_view(request):
             c_obj.estado = nuevo_estado
             c_obj.save()
             return redirect('organizador_dashboard')
+        elif form_type == 'descartar_notificacion':
+            sector_id = request.POST.get('sector_id')
+            sector_obj = get_object_or_404(Sector, id=sector_id, evento__organizador=request.user)
+            NotificacionDescartada.objects.get_or_create(organizador=request.user, sector=sector_obj)
+            NotificacionLeida.objects.filter(organizador=request.user, sector=sector_obj).delete()
+            return redirect('organizador_dashboard')
+
+    # Lógica de Notificaciones de Stock Bajo (<= 20)
+    sectores_con_bajo_stock = Sector.objects.filter(evento__organizador=request.user, stock_total__lte=20)
+    sectores_con_buen_stock = Sector.objects.filter(evento__organizador=request.user, stock_total__gt=20)
+    NotificacionDescartada.objects.filter(organizador=request.user, sector__in=sectores_con_buen_stock).delete()
+    NotificacionLeida.objects.filter(organizador=request.user, sector__in=sectores_con_buen_stock).delete()
+
+    descartados_ids = NotificacionDescartada.objects.filter(organizador=request.user).values_list('sector_id', flat=True)
+    notificaciones = sectores_con_bajo_stock.exclude(id__in=descartados_ids)
+
+    leidas_ids = NotificacionLeida.objects.filter(organizador=request.user).values_list('sector_id', flat=True)
+    tiene_no_leidas = notificaciones.exclude(id__in=leidas_ids).exists()
 
     evento_form = EventoForm()
     sector_form = SectorForm()
@@ -174,5 +213,19 @@ def organizador_dashboard_view(request):
         'recintos': recintos,
         'compras_clientes': compras_clientes,
         'evento_form': evento_form,
-        'sector_form': sector_form
+        'sector_form': sector_form,
+        'notificaciones': notificaciones,
+        'tiene_no_leidas': tiene_no_leidas,
     })
+
+@login_required
+def marcar_notificaciones_leidas_view(request):
+    """Endpoint AJAX para marcar todas las notificaciones activas como leídas al abrir el menú."""
+    if request.method == 'POST' and request.user.role == 'ORGANIZADOR':
+        sectores_activos = Sector.objects.filter(evento__organizador=request.user, stock_total__lte=20)
+        descartados_ids = NotificacionDescartada.objects.filter(organizador=request.user).values_list('sector_id', flat=True)
+        notifs = sectores_activos.exclude(id__in=descartados_ids)
+        for n in notifs:
+            NotificacionLeida.objects.get_or_create(organizador=request.user, sector=n)
+        return JsonResponse({'status': 'ok'})
+    return JsonResponse({'status': 'error'}, status=400)

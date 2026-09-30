@@ -1,7 +1,14 @@
 {% extends 'base.html' %}
+{% load clp_tags %}
 {% block title %}Mi Carro de Compras{% endblock %}
 {% block content %}
-<h2 class="fw-bold mb-4">Carro de Reserva de Entradas</h2>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold mb-0">Carro de Reserva de Entradas</h2>
+    <a href="{% url 'home' %}" class="btn btn-dark d-flex align-items-center gap-2 shadow-sm px-3 py-2 fw-semibold">
+        🎵 Volver a la Cartelera
+    </a>
+</div>
 
 {% if error %}
 <div class="alert alert-danger">{{ error }}</div>
@@ -23,9 +30,15 @@
                 {% for item in carro.items.all %}
                 <tr>
                     <td class="fw-semibold">{{ item.sector.nombre }} ({{ item.sector.evento.nombre }})</td>
-                    <td>${{ item.sector.precio }}</td>
+                    <td>
+                        <span class="text-success">${{ item.sector.precio|clp }}</span> 
+                        <span class="text-dark">CLP</span>
+                    </td>
                     <td>{{ item.cantidad }}</td>
-                    <td class="fw-bold text-success">${% widthratio item.sector.precio 1 item.cantidad %}</td>
+                    <td class="fw-bold">
+                        <span class="text-success">${{ item.sector.precio|multiply:item.cantidad }}</span> 
+                        <span class="text-dark">CLP</span>
+                    </td>
                     <td>
                         <form method="POST" class="d-inline">
                             {% csrf_token %}
@@ -40,8 +53,11 @@
         </table>
         
         <div class="d-flex justify-content-between align-items-center mt-4">
-            <h3 class="fw-bold">Total a Pagar: ${{ total }}</h3>
-            <!-- Botón que activa el Modal de Confirmación -->
+            <h3 class="fw-bold">
+                Total a Pagar: 
+                <span class="text-success">${{ total|clp }}</span> 
+                <span class="text-dark">CLP</span>
+            </h3>
             <button type="button" class="btn btn-success btn-lg px-4" data-bs-toggle="modal" data-bs-target="#modalTerminosCompra">
                 Confirmar Compra y Pagar
             </button>

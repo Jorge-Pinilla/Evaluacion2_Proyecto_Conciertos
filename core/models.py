@@ -148,3 +148,33 @@ class EntradaComprada(models.Model):
 
     def __str__(self):
         return f"Ticket UUID: {self.codigo_hash} ({self.sector})"
+
+class NotificacionDescartada(models.Model):
+    """
+    MODELO: NotificacionDescartada (3NF)
+    Almacena qué alertas de stock bajo han sido descartadas/eliminadas 
+    por el organizador para evitar que vuelvan a aparecer hasta que el stock varíe.
+    """
+    organizador = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notificaciones_descartadas')
+    sector = models.ForeignKey(Sector, on_delete=models.CASCADE, related_name='alertas_descartadas')
+
+    class Meta:
+        unique_together = ('organizador', 'sector')
+
+    def __str__(self):
+        return f"Descartada por {self.organizador.username} - Sector {self.sector.nombre}"
+
+class NotificacionLeida(models.Model):
+    """
+    MODELO: NotificacionLeida (3NF)
+    Registra qué alertas de stock bajo ya han sido visualizadas (leídas) 
+    por el organizador para apagar el indicador del punto rojo.
+    """
+    organizador = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notificaciones_leidas')
+    sector = models.ForeignKey(Sector, on_delete=models.CASCADE, related_name='leidas')
+
+    class Meta:
+        unique_together = ('organizador', 'sector')
+
+    def __str__(self):
+        return f"Leída por {user_username(self.organizador)} - Sector {self.sector.nombre}"

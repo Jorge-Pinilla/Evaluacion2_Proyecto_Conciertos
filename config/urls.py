@@ -5,10 +5,12 @@ from django.shortcuts import render
 from rest_framework_simplejwt.views import TokenRefreshView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from api.views import CustomTokenObtainPairView
+from core import views
 from core.views import (
     home_view, evento_detail_view, registro_view, login_view, logout_view,
     carro_view, checkout_view, mis_entradas_view, organizador_dashboard_view
 )
+
 
 def custom_404_view(request, exception=None):
     """Controlador personalizado para error 404."""
@@ -27,6 +29,7 @@ urlpatterns = [
     path('checkout/', checkout_view, name='checkout'),
     path('mis-entradas/', mis_entradas_view, name='mis_entradas'),
     path('organizador/dashboard/', organizador_dashboard_view, name='organizador_dashboard'),
+    path('organizador/marcar-leidas/', views.marcar_notificaciones_leidas_view, name='marcar_leidas'),
 
     # Endpoints API & JWT
     path('api/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
