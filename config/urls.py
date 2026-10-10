@@ -10,7 +10,11 @@ from core.views import (
     home_view, evento_detail_view, registro_view, login_view, logout_view,
     carro_view, checkout_view, mis_entradas_view, organizador_dashboard_view
 )
-
+from api.views import (
+    CustomTokenObtainPairView, EventoListView, SectorByEventoView,
+    CarroTicketsDetailView, ComprasPagarView, MisEntradasListView,
+    OrganizadorEstadoOrdenView,
+)
 
 def custom_404_view(request, exception=None):
     """Controlador personalizado para error 404."""
@@ -36,6 +40,13 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    # Endpoints API
+    path('api/eventos/', EventoListView.as_view()),
+    path('api/eventos/<int:evento_id>/sectores/', SectorByEventoView.as_view()),
+    path('api/carro-tickets/', CarroTicketsDetailView.as_view()),
+    path('api/compras/pagar/', ComprasPagarView.as_view()),
+    path('api/mis-entradas/', MisEntradasListView.as_view()),
+    path('api/compras/<int:pk>/estado/', OrganizadorEstadoOrdenView.as_view()),
 ]
 
 # Captura de errores 404 obligatoria mediante repath
