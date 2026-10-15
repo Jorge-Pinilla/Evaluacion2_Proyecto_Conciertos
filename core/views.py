@@ -169,10 +169,26 @@ def organizador_dashboard_view(request):
             evento_id = request.POST.get('evento_id')
             evento_obj = get_object_or_404(Evento, id=evento_id, organizador=request.user)
             s_form = SectorForm(request.POST)
+            
             if s_form.is_valid():
-                sec = s_form.save(commit=False)
-                sec.evento = evento_obj
-                sec.save()
+                nombre_sector = s_form.cleaned_data['nombre']
+                stock_nuevo = s_form.cleaned_data['stock_total']
+                precio_nuevo = s_form.cleaned_data['precio']
+                
+                # Buscamos si ya existe un sector con este nombre en este evento
+                sector_existente = Sector.objects.filter(evento=evento_obj, nombre=nombre_sector).first()
+                
+                if sector_existente:
+                    # Si el sector ya existe, sumamos las entradas y actualizamos el precio
+                    sector_existente.stock_total += stock_nuevo
+                    sector_existente.precio = precio_nuevo
+                    sector_existente.save()
+                else:
+                    # Si no existe, creamos el sector normalmente
+                    sec = s_form.save(commit=False)
+                    sec.evento = evento_obj
+                    sec.save()
+                    
                 return redirect('organizador_dashboard')
         elif form_type == 'estado_compra':
             compra_id = request.POST.get('compra_id')
@@ -193,7 +209,11 @@ def organizador_dashboard_view(request):
             NotificacionDescartada.objects.get_or_create(organizador=request.user, sector=sector_obj)
             NotificacionLeida.objects.filter(organizador=request.user, sector=sector_obj).delete()
             return redirect('organizador_dashboard')
-
+        elif form_type == 'eliminar_sector':
+            sector_id = request.POST.get('sector_id')
+            sector_obj = get_object_or_404(Sector, id=sector_id, evento__organizador=request.user)
+            sector_obj.delete()
+            return redirect('organizador_dashboard')
     # Lógica de Notificaciones de Stock Bajo (<= 20)
     sectores_con_bajo_stock = Sector.objects.filter(evento__organizador=request.user, stock_total__lte=20)
     sectores_con_buen_stock = Sector.objects.filter(evento__organizador=request.user, stock_total__gt=20)

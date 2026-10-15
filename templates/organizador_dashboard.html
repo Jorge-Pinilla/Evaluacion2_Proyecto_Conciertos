@@ -82,7 +82,48 @@
         </form>
     </div>
 </div>
-
+<div class="card shadow-sm border-0 p-4 mb-5">
+    <h3 class="fw-bold mb-3">Mis Sectores Creados</h3>
+    <div class="accordion" id="accordionSectores">
+        {% for ev in mis_eventos %}
+        <div class="accordion-item border-0 border-bottom mb-2">
+            <h2 class="accordion-header" id="headingEv{{ ev.id }}">
+                <button class="accordion-button collapsed fw-semibold bg-light text-dark rounded" type="button" data-bs-toggle="collapse" data-bs-target="#collapseEv{{ ev.id }}" aria-expanded="false" aria-controls="collapseEv{{ ev.id }}">
+                    🎵 Evento: {{ ev.nombre }}
+                </button>
+            </h2>
+            <div id="collapseEv{{ ev.id }}" class="accordion-collapse collapse" aria-labelledby="headingEv{{ ev.id }}" data-bs-parent="#accordionSectores">
+                <div class="accordion-body p-0 pt-3">
+                    {% if ev.sectores.all %}
+                        <ul class="list-group list-group-flush mb-3">
+                            {% for sector in ev.sectores.all %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center py-3 border-0 bg-transparent">
+                                <div>
+                                    <span class="fw-bold text-dark fs-6">{{ sector.nombre }}</span>
+                                    <span class="d-block text-muted small mt-1">Precio: ${{ sector.precio }} | Stock Disponible: {{ sector.stock_total }}</span>
+                                </div>
+                                <form method="POST" class="d-inline" onsubmit="return confirm('¿Estás seguro de que deseas eliminar este sector de forma permanente? Esta acción no se puede deshacer.');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="form_type" value="eliminar_sector">
+                                    <input type="hidden" name="sector_id" value="{{ sector.id }}">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm px-3 shadow-sm">
+                                        🗑️ Eliminar Sector
+                                    </button>
+                                </form>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted small px-3">No hay sectores creados para este evento.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <p class="text-muted">Aún no has registrado ningún evento.</p>
+        {% endfor %}
+    </div>
+</div>
 <!-- Gestión de Órdenes de Clientes y Estados -->
 <div class="card shadow-sm border-0 p-4">
     <h3 class="fw-bold mb-3">Órdenes de Clientes y Gestión de Estados</h3>

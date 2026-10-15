@@ -25,7 +25,7 @@ SECRET_KEY = 'jorge654'
 # SECURITY WARNING: don't run with debug turned on in production!
 
 # Cambia a False para activar las páginas de error personalizadas (404 / 500)
-DEBUG = False
+DEBUG = True
 
 # Agrega tu entorno local para que el servidor siga respondiendo correctamente
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
