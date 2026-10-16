@@ -28,7 +28,7 @@ SECRET_KEY = 'jorge654'
 DEBUG = True
 
 # Agrega tu entorno local para que el servidor siga respondiendo correctamente
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost',]
 
 # Application definition
 
@@ -150,7 +150,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
-
+STATIC_ROOT = '/home/ubuntu/apps/Evaluacion2_Proyecto_Conciertos/static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Email
