@@ -7,6 +7,17 @@ from django.db import transaction
 from django.http import JsonResponse
 from core.models import Evento, Sector, CarroTickets, ItemCarro, Compra, ItemCompra, EntradaComprada, Recinto, NotificacionDescartada, NotificacionLeida
 from .forms import RegistroForm, EventoForm, SectorForm
+import hashlib
+import hmac
+from django.conf import settings
+from django.db.models import F
+from django.urls import reverse
+from django.views.decorators.csrf import csrf_exempt
+from transbank.webpay.webpay_plus.transaction import Transaction
+from transbank.common.options import WebpayOptions
+from transbank.common.integration_type import IntegrationType
+from transbank.common.integration_commerce_codes import IntegrationCommerceCodes
+from transbank.common.integration_api_keys import IntegrationApiKeys
 
 def home_view(request):
     """Catálogo público de eventos con buscador opcional."""
@@ -84,60 +95,157 @@ def carro_view(request):
     total = sum(item.sector.precio * item.cantidad for item in carro.items.all())
     return render(request, 'carro.html', {'carro': carro, 'total': total})
 
+# ---------------------------------------------------------------------------
+# Webpay Plus (Transbank)
+# ---------------------------------------------------------------------------
+def _webpay():
+    """Cliente Webpay en ambiente de INTEGRACION (pruebas).
+    Para produccion: WebpayOptions('TU_CODIGO_COMERCIO', 'TU_API_KEY', IntegrationType.LIVE)."""
+    return Transaction(WebpayOptions(
+        IntegrationCommerceCodes.WEBPAY_PLUS,
+        IntegrationApiKeys.WEBPAY,
+        IntegrationType.TEST,
+    ))
+
+
+def _firma(compra_id):
+    return hmac.new(settings.SECRET_KEY.encode(), str(compra_id).encode(), hashlib.sha256).hexdigest()[:10]
+
+
+def _buy_order(compra_id):
+    """Orden de compra para Transbank (max. 26 caracteres): '<id>-<firma>'."""
+    return f"{compra_id}-{_firma(compra_id)}"
+
+
+def _compra_id_de(buy_order):
+    """Devuelve el id de la compra si la firma de la orden es valida; si no, None."""
+    try:
+        cid, firma = str(buy_order).split('-')
+        if hmac.compare_digest(firma, _firma(int(cid))):
+            return int(cid)
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
+def _cancelar_compra(compra_id):
+    """PENDIENTE -> CANCELADO y devuelve el stock reservado. Idempotente."""
+    with transaction.atomic():
+        compra = Compra.objects.select_for_update().get(pk=compra_id)
+        if compra.estado != 'PENDIENTE':
+            return compra
+        for item in compra.items.all():
+            if item.sector_id:
+                Sector.objects.filter(pk=item.sector_id).update(stock_total=F('stock_total') + item.cantidad)
+        compra.estado = 'CANCELADO'
+        compra.save()
+    return compra
+
+
+def _confirmar_compra(compra_id):
+    """PENDIENTE -> PAGADO: genera las entradas y vacia el carro. Idempotente."""
+    with transaction.atomic():
+        compra = Compra.objects.select_for_update().get(pk=compra_id)
+        if compra.estado != 'PENDIENTE':
+            return compra
+        compra.estado = 'PAGADO'
+        compra.save()
+        titular = compra.usuario.get_full_name() or compra.usuario.username
+        for item in compra.items.select_related('sector'):
+            for _ in range(item.cantidad):
+                EntradaComprada.objects.create(compra=compra, sector=item.sector, titular=titular)
+        ItemCarro.objects.filter(carro__usuario=compra.usuario).delete()
+    return compra
+
+
 @login_required
 def checkout_view(request):
-    """Checkout: valida stock con bloqueo de fila (select_for_update), evitando sobreventa concurrente."""
+    """Checkout: reserva el stock (con bloqueo de fila), crea la compra PENDIENTE
+    y redirige al usuario a Webpay para pagar."""
     if request.user.role != 'ESPECTADOR':
         return redirect('home')
-    
+
     carro = get_object_or_404(CarroTickets, usuario=request.user)
-    items = carro.items.all()
-    if not items.exists():
+    items = list(carro.items.select_related('sector'))
+    if not items:
         return redirect('carro')
+
+    def _error(msg):
+        total = sum(i.sector.precio * i.cantidad for i in items)
+        return render(request, 'carro.html', {'carro': carro, 'total': total, 'error': msg})
 
     try:
         with transaction.atomic():
-            sector_ids = [item.sector.id for item in items]
-            # select_for_update() bloquea temporalmente los sectores en PostgreSQL para evitar condiciones de carrera simultáneas
-            sectores = Sector.objects.select_for_update().filter(id__in=sector_ids)
-            sector_dict = {s.id: s for s in sectores}
-
+            sectores = {s.id: s for s in Sector.objects.select_for_update().filter(id__in=[i.sector_id for i in items])}
             total = 0
             for item in items:
-                sector_db = sector_dict.get(item.sector.id)
+                sector_db = sectores.get(item.sector_id)
                 if not sector_db or sector_db.stock_total < item.cantidad:
-                    total = sum(i.sector.precio * i.cantidad for i in items)
-                    return render(request, 'carro.html', {
-                        'carro': carro, 
-                        'total': total, 
-                        'error': f'¡Lo sentimos! Las entradas para el sector "{item.sector.nombre}" acaban de agotarse o no hay stock suficiente[cite: 10].'
-                    })
+                    return _error(f'¡Lo sentimos! Las entradas para el sector "{item.sector.nombre}" acaban de agotarse o no hay stock suficiente.')
                 total += sector_db.precio * item.cantidad
 
-            # Crear compra transaccional en estado PAGADO
-            compra = Compra.objects.create(usuario=request.user, total=total, estado='PAGADO')
+            compra = Compra.objects.create(usuario=request.user, total=total, estado='PENDIENTE')
             for item in items:
-                sector_db = sector_dict[item.sector.id]
+                sector_db = sectores[item.sector_id]
                 ItemCompra.objects.create(compra=compra, sector=sector_db, cantidad=item.cantidad, precio_unitario=sector_db.precio)
-                # Descuento estricto de stock del catálogo físico
-                sector_db.stock_total -= item.cantidad
+                sector_db.stock_total -= item.cantidad  # reserva de stock mientras se paga
                 sector_db.save()
-                # Generación de entradas con código Hash/UUID único por ticket
-                for _ in range(item.cantidad):
-                    EntradaComprada.objects.create(compra=compra, sector=sector_db, titular=request.user.get_full_name() or request.user.username)
+    except Exception:
+        return _error('Ocurrió un error inesperado al procesar la compra. Inténtalo nuevamente.')
 
-            # Vaciar carro persistente tras compra exitosa
-            carro.items.all().delete()
-            
+    try:
+        resp = _webpay().create(
+            _buy_order(compra.id),
+            str(request.user.id),
+            int(total),
+            request.build_absolute_uri(reverse('webpay_retorno')),
+        )
+    except Exception:
+        _cancelar_compra(compra.id)
+        return _error('No se pudo conectar con Webpay. Inténtalo nuevamente.')
+
+    return render(request, 'webpay_redirect.html', {'url': resp['url'], 'token': resp['token']})
+
+
+@csrf_exempt
+def webpay_retorno(request):
+    """Webpay vuelve aqui (por POST o GET). No depende de la sesion del usuario:
+    la compra se identifica por la orden de compra firmada."""
+    datos = {**request.GET.dict(), **request.POST.dict()}
+    token = datos.get('token_ws')
+
+    # Pago anulado por el usuario, formulario con error o tiempo agotado
+    if datos.get('TBK_TOKEN') or not token:
+        compra_id = _compra_id_de(datos.get('TBK_ORDEN_COMPRA'))
+        if compra_id:
+            _cancelar_compra(compra_id)
+        return render(request, 'pago_resultado.html', {
+            'mensaje': 'El pago fue anulado o expiró. No se realizó ningún cobro y tus entradas siguen en el carro.'})
+
+    try:
+        resp = _webpay().commit(token)
+    except Exception:
+        return render(request, 'pago_resultado.html', {
+            'mensaje': 'No pudimos confirmar el pago con Webpay. Revisa "Mis entradas" antes de intentar de nuevo.'})
+
+    compra_id = _compra_id_de(resp.get('buy_order'))
+    compra = Compra.objects.filter(pk=compra_id).first() if compra_id else None
+    if not compra:
+        return render(request, 'pago_resultado.html', {'mensaje': 'No se encontró la orden de compra.'})
+
+    aprobado = (
+        resp.get('status') == 'AUTHORIZED'
+        and resp.get('response_code') == 0
+        and int(resp.get('amount', 0)) == int(compra.total)
+    )
+    if aprobado:
+        _confirmar_compra(compra.id)
         return redirect('mis_entradas')
 
-    except Exception as e:
-        total = sum(i.sector.precio * i.cantidad for i in items)
-        return render(request, 'carro.html', {
-            'carro': carro, 
-            'total': total, 
-            'error': 'Ocurrió un error inesperado al procesar la compra por alta concurrencia. Inténtalo nuevamente.'
-        })
+    _cancelar_compra(compra.id)
+    return render(request, 'pago_resultado.html', {
+        'mensaje': 'El pago fue rechazado. No se realizó ningún cobro y tus entradas siguen en el carro.'})
+
 
 @login_required
 def mis_entradas_view(request):

@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}Resultado del pago{% endblock %}
+{% block content %}
+<div class="alert alert-danger">{{ mensaje }}</div>
+<a href="{% url 'carro' %}" class="btn btn-dark">Volver al carro</a>
+<a href="{% url 'home' %}" class="btn btn-outline-dark ms-2">Ir a la cartelera</a>
+{% endblock %}

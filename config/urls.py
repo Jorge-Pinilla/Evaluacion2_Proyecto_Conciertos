@@ -31,6 +31,7 @@ urlpatterns = [
     path('logout/', logout_view, name='logout'),
     path('carro/', carro_view, name='carro'),
     path('checkout/', checkout_view, name='checkout'),
+    path('webpay/retorno/', views.webpay_retorno, name='webpay_retorno'),
     path('mis-entradas/', mis_entradas_view, name='mis_entradas'),
     path('organizador/dashboard/', organizador_dashboard_view, name='organizador_dashboard'),
     path('organizador/marcar-leidas/', views.marcar_notificaciones_leidas_view, name='marcar_leidas'),
